@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Struktur Organisasi — NFBS Lembang</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      fontFamily: { sans: ['Plus Jakarta Sans','sans-serif'], display: ['Fraunces','serif'] },
+      colors: { nfbs: { green:'#0E7A54', dark:'#0A5A3E', gold:'#C9A227', ink:'#0A0F1A' } }
+    }}
+  }
+</script>
+<style>
+  body{font-family:'Plus Jakarta Sans',sans-serif;background:#0A0F1A;}
+  .font-display{font-family:'Fraunces',serif;}
+  .custom-scrollbar::-webkit-scrollbar{width:6px;height:6px;}
+  .custom-scrollbar::-webkit-scrollbar-track{background:transparent;}
+  .custom-scrollbar::-webkit-scrollbar-thumb{background:#2A3548;border-radius:99px;}
+
+  /* ===== VIEWPORT ===== */
+  .tree-viewport{
+    position:relative; width:100%; height:calc(100vh - 178px); min-height:560px;
+    overflow:hidden; cursor:grab;
+    background-color:#080C14;
+    background-image:radial-gradient(rgba(255,255,255,.045) 1px, transparent 1px);
+    background-size:26px 26px;
+  }
+  .tree-viewport.grabbing{cursor:grabbing;}
+  .tree-wrapper{
+    position:absolute; top:0; left:0; width:max-content;
+    padding:60px 120px 100px;
+    transform-origin:0 0;
+  }
+  .tree-wrapper.animated{ transition:transform .45s cubic-bezier(.25,1,.5,1); }
+
+  .otree, .otree ul{ display:flex; justify-content:center; padding-top:0; position:relative; white-space:nowrap;}
+  .otree > li{ padding-top:0; }
+  .otree li{ float:left; text-align:center; list-style:none; position:relative; padding:0 14px; }
+  .otree ul{ padding-top:44px; }
+
+  /* connector lines */
+  .otree ul li::before, .otree ul li::after{
+    content:''; position:absolute; top:0; right:50%; width:50%; height:24px;
+    border-top:2px solid #263248; transition:border-color .2s;
+  }
+  .otree ul li::after{ right:auto; left:50%; border-left:2px solid #263248; }
+  .otree ul li:only-child::after, .otree ul li:only-child::before{ display:none; }
+  .otree ul li:only-child{ padding-top:0; }
+  .otree ul li:first-child::before, .otree ul li:last-child::after{ border:none; }
+  .otree ul li:last-child::before{ border-right:2px solid #263248; border-radius:0 8px 0 0; }
+  .otree ul li:first-child::after{ border-radius:8px 0 0 0; }
+  .otree ul ul::before{
+    content:''; position:absolute; top:0; left:50%; width:0; height:24px; border-left:2px solid #263248;
+  }
+
+  .org-children{
+    max-height:0; opacity:0; overflow:hidden; pointer-events:none;
+    transition:max-height .45s ease, opacity .35s ease;
+  }
+  .org-children.is-open{ max-height:4000px; opacity:1; overflow:visible; pointer-events:auto; }
+
+  .org-card{
+    --accent:#10B981;
+    position:relative; display:inline-block; text-align:left;
+    background:linear-gradient(180deg,#101826 0%, #0D1420 100%);
+    border:1px solid #1E293B; border-top:3px solid var(--accent);
+    border-radius:16px; padding:14px 14px 12px; width:198px;
+    box-shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 8px 18px -10px rgba(0,0,0,.6);
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    cursor:default;
+  }
+  .org-card.clickable{ cursor:pointer; }
+  .org-card.clickable:hover{ transform:translateY(-3px); box-shadow:0 14px 26px -12px var(--accent), 0 8px 18px -10px rgba(0,0,0,.6); }
+  .org-card.is-match{ border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .org-card.is-dim{ opacity:.35; }
+
+  .org-top{ display:flex; align-items:center; gap:10px; }
+  .org-badge{
+    display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:800;
+    letter-spacing:.03em; text-transform:uppercase; padding:2px 8px; border-radius:99px;
+    color:var(--accent); background:color-mix(in srgb, var(--accent) 16%, transparent);
+    margin-bottom:6px;
+  }
+  .org-unit{ font-weight:700; font-size:12.5px; color:#F1F5F9; line-height:1.25; }
+  .org-name{ font-size:11px; color:#93A3B8; margin-top:2px; font-weight:500; }
+  .org-expand{
+    margin-top:9px; padding-top:8px; border-top:1px dashed #1E293B;
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:10px; font-weight:700; color:#64748B;
+  }
+  .org-expand i{ color:var(--accent); }
+
+  .card-actions{ position:absolute; top:8px; right:8px; display:flex; gap:4px; opacity:0; transition:opacity .15s; }
+  .org-card:hover .card-actions{ opacity:1; }
+  .card-actions button{
+    width:20px; height:20px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+    font-size:9px; border:1px solid #1E293B; background:#0D1420; color:#94A3B8;
+  }
+  .card-actions button:hover{ color:#fff; }
+
+  .avatar-ring{ box-shadow:0 0 0 2px #0D1420, 0 0 0 3px var(--accent); }
+
+  input[type=file]::file-selector-button{ cursor:pointer; }
+  .toggle-pill{ transition:all .15s ease; }
+</style>
+</head>
+<body class="text-slate-100 antialiased min-h-screen flex flex-col">
+
+<!-- HEADER -->
+<header class="bg-[#0D1420]/95 backdrop-blur border-b border-slate-800/80 sticky top-0 z-40">
+  <div class="max-w-[1400px] mx-auto px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <div class="bg-gradient-to-br from-nfbs-green to-emerald-600 w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-950/40">
+        <i class="fa-solid fa-sitemap text-white text-lg"></i>
+      </div>
+      <div>
+        <h1 class="font-display font-semibold text-lg text-white leading-tight">Struktur Organisasi NFBS Lembang</h1>
+        <p class="text-[11px] text-slate-400">Peta jabatan &amp; jalur koordinasi kelembagaan</p>
+      </div>
+    </div>
+
+    <div class="flex items-center bg-slate-900 p-1 rounded-2xl border border-slate-800">
+      <button id="tabBtnTree" onclick="switchTab('tree')" class="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-600 text-white shadow">
+        <i class="fa-solid fa-diagram-project"></i> Bagan Organisasi
+      </button>
+      <button id="tabBtnDashboard" onclick="switchTab('dashboard')" class="px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-400 hover:text-white">
+        <i class="fa-solid fa-chart-pie"></i> Dashboard &amp; Data
+      </button>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button onclick="openImportModal()" class="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-slate-800">
+        <i class="fa-solid fa-file-import"></i> Import Data
+      </button>
+      <button onclick="openInputModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg">
+        <i class="fa-solid fa-user-plus"></i> Tambah Data
+      </button>
+      <button onclick="resetDefaultData()" title="Reset ke Data Awal" class="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-bold transition border border-slate-800">
+        <i class="fa-solid fa-rotate-left"></i>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- TREE VIEW -->
+<section id="viewTree" class="flex-grow flex flex-col relative">
+  <div class="bg-[#0D1420]/90 border-b border-slate-800/80 py-2.5 px-5 backdrop-blur sticky top-[65px] z-30">
+    <div class="max-w-[1400px] mx-auto flex flex-wrap items-center justify-between gap-3">
+
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs">
+          <button id="modeLevelBtn" onclick="setViewMode('level')" class="toggle-pill px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5">
+            <i class="fa-solid fa-layer-group"></i> Jelajah per Level
+          </button>
+          <button id="modeAllBtn" onclick="setViewMode('all')" class="toggle-pill px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5">
+            <i class="fa-solid fa-table-cells-large"></i> Lihat Semua (1 Direktorat)
+          </button>
+        </div>
+
+        <select id="filterDirektorat" onchange="onFilterDirektoratChange()" class="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-xl px-3 py-2 focus:ring-2 focus:ring-nfbs-gold outline-none"></select>
+
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[11px]"></i>
+          <input id="treeSearch" oninput="onTreeSearch()" placeholder="Cari nama / jabatan..." class="bg-slate-900 border border-slate-800 text-xs text-white rounded-xl pl-8 pr-3 py-2 outline-none focus:border-nfbs-gold w-52">
+        </div>
+
+        <button id="btnExpandAll" onclick="expandAllNodes()" class="px-2.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-800 text-xs font-bold" title="Buka Semua">
+          <i class="fa-solid fa-folder-open"></i>
+        </button>
+        <button id="btnCollapseAll" onclick="collapseAllNodes()" class="px-2.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl border border-slate-800 text-xs font-bold" title="Tutup Semua">
+          <i class="fa-solid fa-folder"></i>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <button onclick="zoomBy(-0.15)" class="w-8 h-8 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800 flex items-center justify-center"><i class="fa-solid fa-minus text-[10px]"></i></button>
+        <span id="zoomLabel" class="text-[10px] font-bold text-slate-400 w-10 text-center">100%</span>
+        <button onclick="zoomBy(0.15)" class="w-8 h-8 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800 flex items-center justify-center"><i class="fa-solid fa-plus text-[10px]"></i></button>
+        <button onclick="fitToScreen()" class="px-3 h-8 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow ml-1">
+          <i class="fa-solid fa-expand"></i> Sesuaikan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- legend -->
+  <div class="max-w-[1400px] mx-auto w-full px-5 pt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[10px] text-slate-400 font-semibold">
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle" style="color:#10B981;font-size:7px"></i> Direktorat</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle" style="color:#3B82F6;font-size:7px"></i> Manajer / Departemen</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle" style="color:#F59E0B;font-size:7px"></i> Kepala Bidang</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle" style="color:#EC4899;font-size:7px"></i> Ketua Divisi</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle" style="color:#14B8A6;font-size:7px"></i> Wakil Kabid</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle" style="color:#6366F1;font-size:7px"></i> Koordinator</span>
+    <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle" style="color:#A855F7;font-size:7px"></i> Staf / Guru</span>
+  </div>
+
+  <div class="w-full flex-grow relative">
+    <div id="treeViewport" class="tree-viewport">
+      <div id="treeWrapper" class="tree-wrapper animated">
+        <div id="treeContainer"></div>
+      </div>
+    </div>
+    <div id="emptyState" class="hidden absolute inset-0 flex flex-col items-center justify-center text-center text-slate-500 px-6">
+      <i class="fa-solid fa-sitemap text-3xl mb-3 opacity-40"></i>
+      <p class="text-sm font-semibold">Belum ada data untuk ditampilkan</p>
+      <p class="text-xs mt-1">Coba ubah kata pencarian atau pilih direktorat lain.</p>
+    </div>
+  </div>
+</section>
+
+<!-- DASHBOARD -->
+<section id="viewDashboard" class="max-w-[1400px] mx-auto px-5 py-6 w-full space-y-6 hidden">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="bg-[#0D1420] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-lg">
+      <div>
+        <p class="text-xs text-slate-400 font-medium">Total SDM / Pejabat</p>
+        <h3 id="statTotalPersonel" class="text-3xl font-black text-white mt-1">0</h3>
+        <span class="inline-block mt-2 text-[10px] bg-emerald-500/15 text-emerald-300 px-2 py-0.5 rounded-full font-bold">Seluruh Level</span>
+      </div>
+      <div class="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center"><i class="fa-solid fa-users text-xl"></i></div>
+    </div>
+    <div class="bg-[#0D1420] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-lg">
+      <div>
+        <p class="text-xs text-slate-400 font-medium">Total Direktorat</p>
+        <h3 id="statTotalDirektorat" class="text-3xl font-black text-white mt-1">0</h3>
+        <span id="pctDirektorat" class="inline-block mt-2 text-[10px] bg-blue-500/15 text-blue-300 px-2 py-0.5 rounded-full font-bold">0% dari total</span>
+      </div>
+      <div class="w-12 h-12 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-2xl flex items-center justify-center"><i class="fa-solid fa-building text-xl"></i></div>
+    </div>
+    <div class="bg-[#0D1420] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-lg">
+      <div>
+        <p class="text-xs text-slate-400 font-medium">Total Departemen &amp; Bidang</p>
+        <h3 id="statTotalDept" class="text-3xl font-black text-white mt-1">0</h3>
+        <span id="pctDept" class="inline-block mt-2 text-[10px] bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded-full font-bold">0% dari total</span>
+      </div>
+      <div class="w-12 h-12 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center"><i class="fa-solid fa-layer-group text-xl"></i></div>
+    </div>
+    <div class="bg-[#0D1420] border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-lg">
+      <div>
+        <p class="text-xs text-slate-400 font-medium">Staf &amp; Operasional</p>
+        <h3 id="statTotalStaf" class="text-3xl font-black text-white mt-1">0</h3>
+        <span id="pctStaf" class="inline-block mt-2 text-[10px] bg-purple-500/15 text-purple-300 px-2 py-0.5 rounded-full font-bold">0% dari total</span>
+      </div>
+      <div class="w-12 h-12 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-2xl flex items-center justify-center"><i class="fa-solid fa-user-tie text-xl"></i></div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-[#0D1420] border border-slate-800 p-5 rounded-3xl shadow-xl">
+      <h3 class="font-bold text-sm text-white flex items-center gap-2 mb-4 border-b border-slate-800 pb-3"><i class="fa-solid fa-chart-pie text-emerald-400"></i> Komposisi Level Jabatan</h3>
+      <div class="relative w-full h-64"><canvas id="chartKomposisiLevel"></canvas></div>
+    </div>
+    <div class="bg-[#0D1420] border border-slate-800 p-5 rounded-3xl shadow-xl">
+      <h3 class="font-bold text-sm text-white flex items-center gap-2 mb-4 border-b border-slate-800 pb-3"><i class="fa-solid fa-chart-column text-nfbs-gold"></i> Distribusi Personel per Direktorat</h3>
+      <div class="relative w-full h-64"><canvas id="chartDistribusiDirektorat"></canvas></div>
+    </div>
+  </div>
+
+  <div class="bg-[#0D1420] border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+    <div class="p-5 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <h2 class="font-bold text-base text-white">Daftar Anggota Struktural</h2>
+        <p class="text-xs text-slate-400">Pencarian data &amp; ekspor laporan</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <input type="text" id="tableSearch" onkeyup="renderTable()" placeholder="Cari nama / posisi..." class="bg-slate-900 border border-slate-800 text-xs text-white rounded-xl px-3 py-2 outline-none focus:border-nfbs-gold w-full md:w-56">
+        <button onclick="exportToExcel()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow"><i class="fa-solid fa-file-excel"></i> Excel</button>
+        <button onclick="exportToPDF()" class="px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto custom-scrollbar">
+      <table class="w-full text-left text-xs text-slate-300">
+        <thead class="bg-slate-900/80 uppercase text-[10px] text-slate-400 font-bold border-b border-slate-800">
+          <tr>
+            <th class="px-5 py-3.5">No</th>
+            <th class="px-5 py-3.5">Pejabat / Foto</th>
+            <th class="px-5 py-3.5">Nama Unit / Posisi</th>
+            <th class="px-5 py-3.5">Level Jabatan</th>
+            <th class="px-5 py-3.5">Induk Atasan Langsung</th>
+            <th class="px-5 py-3.5 text-center">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody" class="divide-y divide-slate-800/60 font-medium"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- MODAL -->
+<div id="modalInput" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+  <div class="bg-[#0D1420] border border-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[92vh] flex flex-col">
+    <div class="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/40 shrink-0">
+      <h3 id="modalTitle" class="font-bold text-sm text-white flex items-center gap-2"><i class="fa-solid fa-user-pen text-nfbs-gold"></i> Input Data Anggota</h3>
+      <button onclick="closeInputModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <form onsubmit="handleFormSubmit(event)" class="p-5 space-y-4 text-xs overflow-y-auto custom-scrollbar">
+      <input type="hidden" id="editNodeId" value="">
+
+      <div class="flex items-center gap-4 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+        <div id="fotoPreviewContainer" class="w-16 h-16 rounded-full bg-slate-800 border-2 border-slate-600 overflow-hidden flex items-center justify-center text-slate-400 font-bold text-lg shrink-0">
+          <i class="fa-solid fa-user"></i>
+        </div>
+        <div class="flex-grow min-w-0">
+          <label class="block font-semibold text-slate-300 mb-1">Foto Profil Personel</label>
+          <input type="file" id="formFotoInput" accept="image/*" onchange="previewSelectedFoto()" class="block w-full text-[11px] text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer">
+          <p id="fotoStatus" class="text-[10px] text-slate-500 mt-1">JPG/PNG, otomatis dikompres — maks. hasil ±150KB.</p>
+          <button type="button" onclick="clearFotoPreview()" id="btnClearFoto" class="text-[10px] text-rose-400 hover:underline mt-1 hidden">Hapus Foto</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="block font-semibold text-slate-300 mb-1">Level Posisi / Jabatan</label>
+        <select id="formLevel" onchange="onFormLevelChange()" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-nfbs-gold">
+          <option value="direktur">1. Direktorat</option>
+          <option value="manajer">2. Manajer / Departemen</option>
+          <option value="kabid">3. Kepala Bidang (Kabid)</option>
+          <option value="ketuadivisi">4. Ketua Divisi</option>
+          <option value="wakabid">5. Wakil Kepala Bidang (Wakabid)</option>
+          <option value="koordinator">6. Koordinator Unit</option>
+          <option value="staf">7. Staf / Guru</option>
+        </select>
+      </div>
+
+      <div id="containerParent" class="hidden">
+        <label id="labelParent" class="block font-semibold text-slate-300 mb-1">Atasan Langsung</label>
+        <select id="formParent" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-nfbs-gold"></select>
+      </div>
+
+      <div>
+        <label class="block font-semibold text-slate-300 mb-1">Nama Bidang / Posisi / Unit</label>
+        <input type="text" id="formNamaUnit" required placeholder="Contoh: Bidang Kurikulum / Staf Keuangan" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-nfbs-gold">
+      </div>
+
+      <div>
+        <label class="block font-semibold text-slate-300 mb-1">Nama Pejabat / Anggota</label>
+        <input type="text" id="formNamaPejabat" required placeholder="Contoh: Ustadz Ahmad, S.Pd." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-nfbs-gold">
+      </div>
+
+      <div class="pt-2 flex justify-end gap-2 shrink-0">
+        <button type="button" onclick="closeInputModal()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl font-bold border border-slate-800">Batal</button>
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-lg">Simpan Data</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL IMPORT -->
+<div id="modalImport" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+  <div class="bg-[#0D1420] border border-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[92vh] flex flex-col">
+    <div class="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/40 shrink-0">
+      <h3 class="font-bold text-sm text-white flex items-center gap-2"><i class="fa-solid fa-file-import text-nfbs-gold"></i> Import Data dari Excel</h3>
+      <button onclick="closeImportModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="p-5 space-y-4 text-xs overflow-y-auto custom-scrollbar">
+      <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-2.5">
+        <p class="text-slate-300 font-semibold">Cara pakai:</p>
+        <ol class="list-decimal list-inside text-slate-400 space-y-1 leading-relaxed">
+          <li>Unduh template Excel di bawah ini</li>
+          <li>Isi data sesuai contoh (kolom Level, Nama Unit, Nama Pejabat, Atasan Langsung)</li>
+          <li>Simpan lalu unggah kembali file yang sudah diisi</li>
+        </ol>
+        <p class="text-slate-500 text-[10.5px] leading-relaxed">Kolom "Atasan Langsung" diisi persis sama dengan Nama Unit/Posisi atasannya. Foto tidak bisa diimpor lewat Excel — tambahkan foto belakangan lewat tombol Edit pada tiap data.</p>
+        <button type="button" onclick="downloadImportTemplate()" class="mt-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-2">
+          <i class="fa-solid fa-download"></i> Unduh Template Excel
+        </button>
+      </div>
+
+      <div>
+        <label class="block font-semibold text-slate-300 mb-1">Unggah File Excel/CSV Terisi</label>
+        <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" onchange="handleImportFileSelected(event)" class="block w-full text-[11px] text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer">
+      </div>
+
+      <div id="importPreviewBox" class="hidden bg-slate-900/60 border border-slate-800 rounded-2xl p-4 text-slate-300">
+        <p id="importSummaryText" class="font-semibold"></p>
+        <div id="importErrorList" class="mt-2 max-h-40 overflow-y-auto custom-scrollbar text-[11px] text-rose-400 space-y-1"></div>
+      </div>
+    </div>
+
+    <div class="p-5 border-t border-slate-800 flex justify-end gap-2 shrink-0">
+      <button type="button" onclick="closeImportModal()" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-xl font-bold border border-slate-800">Batal</button>
+      <button type="button" id="btnProcessImport" onclick="processImport()" disabled class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg">Proses Import</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= DATA ================= */
+const DEFAULT_ORG_DATA = {
+  direktur: [
+    { id:1, nama:'Direktorat Pendidikan', pejabat:'KH. Dr. Abdul Hasib, Lc.', foto:'' },
+    { id:2, nama:'Direktorat Pelayanan & Peng. Lembaga', pejabat:'Ustadz H. Wahyu Hidayat, M.M.', foto:'' }
+  ],
+  manajer: [
+    { id:101, direkturId:1, nama:'Dept. Kurikulum', pejabat:'Ustadz Ahmad Ridwan, M.Pd.', foto:'' },
+    { id:102, direkturId:1, nama:'Dept. Kesiswaan', pejabat:'Ustadz Nurfajri, S.T.', foto:'' },
+    { id:103, direkturId:2, nama:'Dept. SDM & Keuangan', pejabat:'Ustadzah Siti Aminah, S.E.', foto:'' }
+  ],
+  kabid: [
+    { id:201, manajerId:101, nama:'Bidang SMA Islam', pejabat:'Ustadz Rahmat Hidayat, S.Pd.', foto:'' },
+    { id:202, manajerId:101, nama:'Bidang SMP Islam', pejabat:'Ustadz Hendra, M.Si.', foto:'' },
+    { id:203, manajerId:103, nama:'Bidang Keuangan', pejabat:'Ustadzah Ratna, M.Ak.', foto:'' }
+  ],
+  wakabid: [
+    { id:301, kabidId:201, nama:'Wakabid Kurikulum SMA', pejabat:'Ustadz Farhan, S.T.', foto:'' }
+  ],
+  ketuadivisi: [
+    { id:601, manajerId:103, nama:'Divisi Pengadaan & Logistik', pejabat:'Ustadz Fajar Nugraha, S.E.', foto:'' }
+  ],
+  koordinator: [
+    { id:401, parentType:'wakabid', parentId:301, nama:'Koord. MIPA', pejabat:'Ustadz Agus, S.Si.', foto:'' },
+    { id:402, parentType:'kabid', parentId:203, nama:'Koord. Kasir', pejabat:'Ustadzah Lisa, A.Md.', foto:'' },
+    { id:403, parentType:'manajer', parentId:102, nama:'Koord. Ekstrakurikuler', pejabat:'Ustadz Yusuf, S.Pd.', foto:'' },
+    { id:404, parentType:'direktur', parentId:2, nama:'Koord. Humas Lembaga', pejabat:'Ustadzah Nadia, S.Sos.', foto:'' }
+  ],
+  staf: [
+    { id:501, parentType:'koordinator', parentId:401, nama:'Guru Fisika', pejabat:'Ustadz Budi Santoso', foto:'' },
+    { id:502, parentType:'kabid', parentId:202, nama:'Guru Biologi SMP', pejabat:'Ustadzah Dewi', foto:'' }
+  ]
+};
+
+const LEVEL_ORDER = ['direktur','manajer','kabid','ketuadivisi','wakabid','koordinator','staf'];
+
+const LEVEL_CFG = {
+  direktur:    { label:'Direktorat',           color:'#10B981', avatar:'w-14 h-14 text-sm' },
+  manajer:     { label:'Manajer / Departemen',  color:'#3B82F6', avatar:'w-12 h-12 text-xs' },
+  kabid:       { label:'Kepala Bidang',         color:'#F59E0B', avatar:'w-11 h-11 text-xs' },
+  ketuadivisi: { label:'Ketua Divisi',          color:'#EC4899', avatar:'w-11 h-11 text-xs' },
+  wakabid:     { label:'Wakil Kepala Bidang',   color:'#14B8A6', avatar:'w-10 h-10 text-xs' },
+  koordinator: { label:'Koordinator Unit',      color:'#6366F1', avatar:'w-10 h-10 text-xs' },
+  staf:        { label:'Staf / Guru',           color:'#A855F7', avatar:'w-9 h-9 text-xs' }
+};
+
+/* =====================================================================
+   KONFIGURASI SUPABASE — ISI DENGAN DATA PROYEK ANDA
+   Ambil dari Dashboard Supabase: Project Settings → API
+   - Project URL         -> SUPABASE_URL
+   - anon public API key -> SUPABASE_ANON_KEY
+   ===================================================================== */
+const SUPABASE_URL = 'https://nxcxcboylfcvidusgcpe.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54Y3hjYm95bGZjdmlkdXNnY3BlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTA1NzUsImV4cCI6MjEwMjIyNjU3NX0.35SPkREbVUik4Ttgl6cr5bdVdNGQTtZg0atM7eCUThA';
+const PHOTO_BUCKET = 'foto-pejabat';
+const TABLE_NAME = 'struktur_organisasi';
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let ORG_DATA = {};
+let tempFotoBase64 = '';
+
+let viewMode = 'level';           // 'level' | 'all'
+let expandedNodes = new Set();    // keys expanded in 'level' mode
+let filterDirVal = 'all';
+let currentSearch = '';
+
+let scale = 1, panX = 0, panY = 0;
+
+let chartLevelInstance = null, chartDirInstance = null;
+
+/* ================= STORAGE LAMA (dibaca sekali saja utk migrasi) ================= */
+// Kunci ini dipakai versi sebelum Supabase (IndexedDB/localStorage di browser).
+// Tetap disimpan hanya agar data yang sudah pernah diinput bisa dipindahkan
+// otomatis ke Supabase saat pertama kali dibuka — bukan lagi tempat simpan utama.
+const LEGACY_STORAGE_KEY = 'NFBS_ORG_DATA_V2';
+const LEGACY_IDB_NAME = 'NFBS_ORG_DB';
+const LEGACY_IDB_STORE = 'orgdata';
+const LEGACY_IDB_KEY = 'main';
+
+function legacyOpenIDB(){
+  return new Promise((resolve, reject) => {
+    if(!window.indexedDB){ reject(new Error('IndexedDB tidak tersedia')); return; }
+    const req = indexedDB.open(LEGACY_IDB_NAME);
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
+async function loadLegacyLocalData(){
+  // Coba IndexedDB dulu (versi penyimpanan lokal terakhir sebelum Supabase)
+  try{
+    const db = await legacyOpenIDB();
+    if(db.objectStoreNames.contains(LEGACY_IDB_STORE)){
+      const data = await new Promise((resolve, reject) => {
+        const tx = db.transaction(LEGACY_IDB_STORE, 'readonly');
+        const req = tx.objectStore(LEGACY_IDB_STORE).get(LEGACY_IDB_KEY);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      if(data) return data;
+    }
+  }catch(e){ /* tidak ada / tidak didukung — lanjut coba localStorage */ }
+
+  // Fallback: localStorage (versi lebih lama lagi)
+  try{
+    const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ /* abaikan */ }
+
+  return null;
+}
+
+/* ================= OVERLAY PROSES (migrasi / reset) ================= */
+function showProgressOverlay(text){
+  let ov = document.getElementById('progressOverlay');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'progressOverlay';
+    ov.className = 'fixed inset-0 bg-slate-950/92 backdrop-blur-sm z-[100] flex flex-col items-center justify-center text-center px-6';
+    ov.innerHTML = `
+      <div class="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p id="progressOverlayText" class="text-sm font-bold text-white"></p>
+      <p id="progressOverlaySub" class="text-xs text-slate-400 mt-1.5"></p>`;
+    document.body.appendChild(ov);
+  }
+  ov.classList.remove('hidden');
+  document.getElementById('progressOverlayText').innerText = text;
+  document.getElementById('progressOverlaySub').innerText = '';
+}
+function updateProgressOverlay(sub){
+  const el = document.getElementById('progressOverlaySub');
+  if(el) el.innerText = sub;
+}
+function hideProgressOverlay(){
+  const ov = document.getElementById('progressOverlay');
+  if(ov) ov.classList.add('hidden');
+}
+
+/* ================= FOTO -> SUPABASE STORAGE ================= */
+async function uploadDataUrlToBucket(dataUrl){
+  try{
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const path = `foto_${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+    const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).upload(path, blob, { contentType:'image/jpeg', upsert:true });
+    if(error){ console.error('Upload foto gagal:', error); return null; }
+    const { data } = supabaseClient.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+    return data ? data.publicUrl : null;
+  }catch(e){
+    console.error('Upload foto gagal:', e);
+    return null;
+  }
+}
+
+async function resolveFotoUrl(foto){
+  if(!foto) return null;
+  if(foto.startsWith('data:')) return await uploadDataUrlToBucket(foto);
+  return foto; // sudah berupa URL, tidak perlu diunggah ulang
+}
+
+/* ================= KIRIM DATASET (migrasi / reset) KE SUPABASE ================= */
+async function pushDatasetToSupabase(dataset, progressLabel){
+  showProgressOverlay(progressLabel || 'Menyimpan data ke Supabase...');
+  const idMap = {};
+  const order = LEVEL_ORDER;
+  const totalCount = order.reduce((sum,k) => sum + ((dataset[k]||[]).length), 0);
+  let done = 0;
+
+  const parentFieldOf = { manajer:'direkturId', kabid:'manajerId', ketuadivisi:'manajerId', wakabid:'kabidId', koordinator:'parentId', staf:'parentId' };
+
+  async function insertOne(level, item){
+    const parentOldId = level === 'direktur' ? null : item[parentFieldOf[level]];
+    const parent_id = parentOldId != null ? (idMap[parentOldId] ?? null) : null;
+    const foto_url = await resolveFotoUrl(item.foto);
+    const { data, error } = await supabaseClient.from(TABLE_NAME)
+      .insert({ level, parent_id, nama_unit:item.nama, nama_pejabat:item.pejabat, foto_url })
+      .select().single();
+    done++;
+    updateProgressOverlay(`${done} / ${totalCount} data tersalin — ${item.nama || ''}`);
+    if(error){ console.error('Gagal menyimpan', level, item, error); return; }
+    idMap[item.id] = data.id;
+  }
+
+  for(const level of order){
+    for(const item of (dataset[level] || [])){
+      await insertOne(level, item);
+    }
+  }
+
+  hideProgressOverlay();
+}
+
+/* ================= AMBIL DATA DARI SUPABASE & UBAH KE BENTUK POHON ================= */
+function transformRowsToOrgData(rows){
+  const byId = {};
+  rows.forEach(r => { byId[r.id] = r; });
+  const out = { direktur:[], manajer:[], kabid:[], ketuadivisi:[], wakabid:[], koordinator:[], staf:[] };
+
+  rows.forEach(r => {
+    const base = { id:r.id, nama:r.nama_unit, pejabat:r.nama_pejabat, foto:r.foto_url || '' };
+    if(r.level === 'direktur') out.direktur.push(base);
+    else if(r.level === 'manajer') out.manajer.push({ ...base, direkturId:r.parent_id });
+    else if(r.level === 'kabid') out.kabid.push({ ...base, manajerId:r.parent_id });
+    else if(r.level === 'ketuadivisi') out.ketuadivisi.push({ ...base, manajerId:r.parent_id });
+    else if(r.level === 'wakabid') out.wakabid.push({ ...base, kabidId:r.parent_id });
+    else if(r.level === 'koordinator' || r.level === 'staf'){
+      const parentRow = byId[r.parent_id];
+      out[r.level].push({ ...base, parentType: parentRow ? parentRow.level : null, parentId:r.parent_id });
+    }
+  });
+
+  return out;
+}
+
+async function loadData(){
+  const { data: rows, error } = await supabaseClient.from(TABLE_NAME).select('*').order('created_at');
+
+  if(error){
+    alert('Gagal memuat data dari Supabase: ' + error.message + '\n\nPeriksa SUPABASE_URL & SUPABASE_ANON_KEY pada kode, koneksi internet, dan pastikan skema tabel sudah dijalankan di Supabase.');
+    ORG_DATA = { direktur:[], manajer:[], kabid:[], ketuadivisi:[], wakabid:[], koordinator:[], staf:[] };
+    return;
+  }
+
+  if(rows.length === 0){
+    const legacy = await loadLegacyLocalData();
+    if(legacy){
+      await pushDatasetToSupabase(legacy, 'Memigrasikan data dari browser ke Supabase...');
+    } else {
+      await pushDatasetToSupabase(DEFAULT_ORG_DATA, 'Menyiapkan data awal di Supabase...');
+    }
+    const { data: rows2, error: err2 } = await supabaseClient.from(TABLE_NAME).select('*').order('created_at');
+    ORG_DATA = transformRowsToOrgData(err2 ? [] : rows2);
+  } else {
+    ORG_DATA = transformRowsToOrgData(rows);
+  }
+}
+
+async function refreshFromSupabase(){
+  await loadData();
+  populateDirektoratFilter();
+  setViewMode(viewMode);
+  renderTable();
+  renderDashboardAnalytics();
+}
+
+function showSaveToast(msg){
+  let toast = document.getElementById('saveToast');
+  if(!toast){
+    toast = document.createElement('div');
+    toast.id = 'saveToast';
+    toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-xl text-xs font-bold shadow-2xl flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-3 pointer-events-none';
+    toast.style.background = '#0D1420';
+    toast.style.border = '1px solid #10B981';
+    toast.style.color = '#fff';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400"></i> ${escapeHtml(msg)}`;
+  toast.classList.remove('opacity-0','translate-y-3');
+  toast.classList.add('opacity-100','translate-y-0');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    toast.classList.remove('opacity-100','translate-y-0');
+    toast.classList.add('opacity-0','translate-y-3');
+  }, 1800);
+}
+
+async function resetDefaultData(){
+  if(!confirm('PERHATIAN: ini akan MENGHAPUS SEMUA data di Supabase (data bersama, mempengaruhi semua perangkat) dan menggantinya dengan data contoh awal. Lanjutkan?')) return;
+  try{
+    showProgressOverlay('Menghapus data lama...');
+    const { error: delErr } = await supabaseClient.from(TABLE_NAME).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if(delErr) throw delErr;
+    await pushDatasetToSupabase(DEFAULT_ORG_DATA, 'Menyiapkan data awal...');
+    hideProgressOverlay();
+    expandedNodes.clear();
+    await refreshFromSupabase();
+  }catch(err){
+    hideProgressOverlay();
+    alert('Gagal mereset data: ' + (err.message || err));
+  }
+}
+
+/* ================= HELPERS ================= */
+function escapeHtml(str){
+  if(str === undefined || str === null) return '';
+  return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+function renderAvatarHtml(fotoUrl, namaPejabat, sizeClasses){
+  if(fotoUrl){
+    return `<img src="${fotoUrl}" alt="${escapeHtml(namaPejabat)}" class="${sizeClasses} rounded-full object-cover avatar-ring">`;
+  }
+  const initials = namaPejabat ? namaPejabat.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join('').toUpperCase() : '?';
+  return `<div class="${sizeClasses} rounded-full bg-slate-800 flex items-center justify-center font-extrabold text-slate-200 avatar-ring">${initials}</div>`;
+}
+
+function getChildren(levelKey, id){
+  let out = [];
+  if(levelKey === 'direktur'){
+    out = ORG_DATA.manajer.filter(m => m.direkturId == id).map(x => ({level:'manajer', item:x}));
+    out = out.concat(ORG_DATA.koordinator.filter(k => k.parentType === 'direktur' && k.parentId == id).map(x => ({level:'koordinator', item:x})));
+    out = out.concat(ORG_DATA.staf.filter(s => s.parentType === 'direktur' && s.parentId == id).map(x => ({level:'staf', item:x})));
+  } else if(levelKey === 'manajer'){
+    out = ORG_DATA.kabid.filter(k => k.manajerId == id).map(x => ({level:'kabid', item:x}));
+    out = out.concat(ORG_DATA.ketuadivisi.filter(kd => kd.manajerId == id).map(x => ({level:'ketuadivisi', item:x})));
+    out = out.concat(ORG_DATA.koordinator.filter(k => k.parentType === 'manajer' && k.parentId == id).map(x => ({level:'koordinator', item:x})));
+    out = out.concat(ORG_DATA.staf.filter(s => s.parentType === 'manajer' && s.parentId == id).map(x => ({level:'staf', item:x})));
+  } else if(levelKey === 'kabid'){
+    out = ORG_DATA.wakabid.filter(w => w.kabidId == id).map(x => ({level:'wakabid', item:x}));
+    out = out.concat(ORG_DATA.koordinator.filter(k => k.parentType === 'kabid' && k.parentId == id).map(x => ({level:'koordinator', item:x})));
+    out = out.concat(ORG_DATA.staf.filter(s => s.parentType === 'kabid' && s.parentId == id).map(x => ({level:'staf', item:x})));
+  } else if(levelKey === 'ketuadivisi'){
+    out = ORG_DATA.koordinator.filter(k => k.parentType === 'ketuadivisi' && k.parentId == id).map(x => ({level:'koordinator', item:x}));
+    out = out.concat(ORG_DATA.staf.filter(s => s.parentType === 'ketuadivisi' && s.parentId == id).map(x => ({level:'staf', item:x})));
+  } else if(levelKey === 'wakabid'){
+    out = ORG_DATA.koordinator.filter(k => k.parentType === 'wakabid' && k.parentId == id).map(x => ({level:'koordinator', item:x}));
+    out = out.concat(ORG_DATA.staf.filter(s => s.parentType === 'wakabid' && s.parentId == id).map(x => ({level:'staf', item:x})));
+  } else if(levelKey === 'koordinator'){
+    out = ORG_DATA.staf.filter(s => s.parentType === 'koordinator' && s.parentId == id).map(x => ({level:'staf', item:x}));
+  }
+  return out;
+}
+
+function nodeMatches(item, q){
+  return item.nama.toLowerCase().includes(q) || item.pejabat.toLowerCase().includes(q);
+}
+
+function subtreeMatches(levelKey, item, q){
+  if(nodeMatches(item, q)) return true;
+  return getChildren(levelKey, item.id).some(c => subtreeMatches(c.level, c.item, q));
+}
+
+function collapseDescendants(levelKey, id){
+  const key = `${levelKey}::${id}`;
+  expandedNodes.delete(key);
+  getChildren(levelKey, id).forEach(c => collapseDescendants(c.level, c.item.id));
+}
+
+/* ================= TREE RENDER ================= */
+function buildNodeHtml(levelKey, item, depth){
+  const cfg = LEVEL_CFG[levelKey];
+  const key = `${levelKey}::${item.id}`;
+  const children = getChildren(levelKey, item.id);
+  const hasChildren = children.length > 0;
+
+  const q = currentSearch.trim().toLowerCase();
+  const searching = q.length > 0;
+
+  if(searching){
+    const selfMatch = nodeMatches(item, q);
+    const childMatch = children.some(c => subtreeMatches(c.level, c.item, q));
+    if(!selfMatch && !childMatch) return '';
+  }
+
+  let expanded;
+  if(viewMode === 'all'){
+    expanded = true;
+  } else if(searching){
+    expanded = children.some(c => subtreeMatches(c.level, c.item, q));
+  } else {
+    expanded = expandedNodes.has(key);
+  }
+
+  const isMatch = searching && nodeMatches(item, q);
+  const clickable = viewMode === 'level' && !searching && hasChildren;
+
+  const childrenHtml = hasChildren
+    ? children.map(c => buildNodeHtml(c.level, c.item, depth+1)).filter(Boolean).join('')
+    : '';
+
+  const cardClasses = ['org-card'];
+  if(clickable) cardClasses.push('clickable');
+  if(isMatch) cardClasses.push('is-match');
+
+  return `<li>
+    <div class="${cardClasses.join(' ')}" style="--accent:${cfg.color}" data-key="${key}" ${clickable ? `onclick="toggleNode('${key}', event)"` : ''}>
+      ${renderActionButtons(levelKey, item.id)}
+      <div class="org-top">
+        ${renderAvatarHtml(item.foto, item.pejabat, cfg.avatar)}
+        <div class="min-w-0">
+          <span class="org-badge">${cfg.label}</span>
+          <h4 class="org-unit truncate">${escapeHtml(item.nama)}</h4>
+        </div>
+      </div>
+      <p class="org-name truncate">${escapeHtml(item.pejabat)}</p>
+      ${hasChildren ? `<div class="org-expand">
+          <span>${children.length} unit di bawah</span>
+          ${viewMode === 'level' && !searching ? `<i class="fa-solid fa-chevron-${expanded ? 'up' : 'down'}"></i>` : ''}
+        </div>` : ''}
+    </div>
+    ${childrenHtml ? `<ul class="org-children ${expanded ? 'is-open' : ''}">${childrenHtml}</ul>` : ''}
+  </li>`;
+}
+
+function renderActionButtons(level, id){
+  return `<div class="card-actions">
+    <button onclick="editNode('${level}', '${id}', event)" title="Edit"><i class="fa-solid fa-pen"></i></button>
+    <button onclick="deleteNode('${level}', '${id}', event)" title="Hapus"><i class="fa-solid fa-trash"></i></button>
+  </div>`;
+}
+
+function toggleNode(key, event){
+  if(event) event.stopPropagation();
+  const cardEl = document.querySelector(`[data-key="${key}"]`);
+  if(!cardEl) return;
+
+  if(expandedNodes.has(key)){
+    const [lvl, id] = splitKey(key);
+    collapseDescendants(lvl, id);
+  } else {
+    const parentUl = cardEl.closest('li').parentElement;
+    if(parentUl){
+      parentUl.querySelectorAll(':scope > li > [data-key]').forEach(sib => {
+        const sibKey = sib.dataset.key;
+        if(sibKey !== key && expandedNodes.has(sibKey)){
+          const [lvl, id] = splitKey(sibKey);
+          collapseDescendants(lvl, id);
+        }
+      });
+    }
+    expandedNodes.add(key);
+  }
+  renderChart(true);
+}
+
+function splitKey(key){
+  const idx = key.indexOf('::');
+  return [key.slice(0, idx), key.slice(idx+2)];
+}
+
+function expandAllNodes(){
+  if(viewMode !== 'level') return;
+  const addAll = (levelKey, id) => {
+    expandedNodes.add(`${levelKey}::${id}`);
+    getChildren(levelKey, id).forEach(c => addAll(c.level, c.item.id));
+  };
+  getVisibleDirektur().forEach(d => addAll('direktur', d.id));
+  renderChart(true);
+}
+
+function collapseAllNodes(){
+  expandedNodes.clear();
+  renderChart(true);
+}
+
+function getVisibleDirektur(){
+  return filterDirVal === 'all' ? ORG_DATA.direktur : ORG_DATA.direktur.filter(d => d.id == filterDirVal);
+}
+
+function renderChart(keepView){
+  const container = document.getElementById('treeContainer');
+  const list = getVisibleDirektur();
+
+  let html = '';
+  if(list.length){
+    html = `<ul class="otree">` + list.map(d => buildNodeHtml('direktur', d, 0)).filter(Boolean).join('') + `</ul>`;
+  }
+
+  container.innerHTML = html;
+  const empty = document.getElementById('emptyState');
+  empty.classList.toggle('hidden', !!html.trim());
+
+  if(!keepView) setTimeout(fitToScreen, 30);
+  else setTimeout(resizeAfterToggle, 30);
+}
+
+function resizeAfterToggle(){
+  // keep current pan/scale, just ensure transform still applied after re-render
+  applyTransform(true);
+}
+
+/* ================= VIEW MODE / FILTER / SEARCH ================= */
+function setViewMode(mode){
+  viewMode = mode;
+  document.getElementById('modeLevelBtn').className = 'toggle-pill px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 ' + (mode==='level' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white');
+  document.getElementById('modeAllBtn').className = 'toggle-pill px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 ' + (mode==='all' ? 'bg-emerald-600 text-white shadow' : 'text-slate-400 hover:text-white');
+
+  document.getElementById('btnExpandAll').classList.toggle('hidden', mode === 'all');
+  document.getElementById('btnCollapseAll').classList.toggle('hidden', mode === 'all');
+
+  if(mode === 'all' && filterDirVal === 'all' && ORG_DATA.direktur.length){
+    filterDirVal = ORG_DATA.direktur[0].id;
+    document.getElementById('filterDirektorat').value = filterDirVal;
+  }
+  populateDirektoratFilter();
+  renderChart();
+}
+
+function populateDirektoratFilter(){
+  const sel = document.getElementById('filterDirektorat');
+  const current = filterDirVal;
+  sel.innerHTML = '';
+  if(viewMode === 'level'){
+    sel.innerHTML += `<option value="all">Semua Direktorat</option>`;
+  }
+  ORG_DATA.direktur.forEach(d => { sel.innerHTML += `<option value="${d.id}">${escapeHtml(d.nama)}</option>`; });
+  const validValues = Array.from(sel.options).map(o=>o.value);
+  sel.value = validValues.includes(String(current)) ? current : (viewMode === 'all' ? (ORG_DATA.direktur[0]?.id ?? '') : 'all');
+  filterDirVal = sel.value;
+}
+
+function onFilterDirektoratChange(){
+  filterDirVal = document.getElementById('filterDirektorat').value;
+  renderChart();
+}
+
+function onTreeSearch(){
+  currentSearch = document.getElementById('treeSearch').value;
+  renderChart(true);
+}
+
+/* ================= ZOOM / PAN ================= */
+function applyTransform(skipAnim){
+  const wrapper = document.getElementById('treeWrapper');
+  wrapper.classList.toggle('animated', !skipAnim);
+  wrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  document.getElementById('zoomLabel').innerText = Math.round(scale*100) + '%';
+}
+
+function zoomBy(delta){
+  scale = Math.min(Math.max(0.3, scale + delta), 2);
+  applyTransform();
+}
+
+function fitToScreen(){
+  const viewport = document.getElementById('treeViewport');
+  const wrapper = document.getElementById('treeWrapper');
+  scale = 1; panX = 0; panY = 0;
+  applyTransform(true);
+  requestAnimationFrame(() => {
+    const vw = viewport.clientWidth - 60;
+    const vh = viewport.clientHeight - 60;
+    const ww = wrapper.scrollWidth || 1;
+    const wh = wrapper.scrollHeight || 1;
+    const s = Math.min(vw / ww, vh / wh, 1.05);
+    scale = Math.max(0.35, Math.min(s, 1.3));
+    panX = Math.max(20, (viewport.clientWidth - ww * scale) / 2);
+    panY = 24;
+    applyTransform();
+  });
+}
+
+function initPan(){
+  const viewport = document.getElementById('treeViewport');
+  let dragging = false, startX = 0, startY = 0;
+
+  viewport.addEventListener('mousedown', e => {
+    if(e.target.closest('.org-card') || e.target.closest('button') || e.target.closest('select') || e.target.closest('input')) return;
+    dragging = true; startX = e.clientX - panX; startY = e.clientY - panY;
+    viewport.classList.add('grabbing');
+  });
+  window.addEventListener('mousemove', e => {
+    if(!dragging) return;
+    panX = e.clientX - startX; panY = e.clientY - startY;
+    applyTransform(true);
+  });
+  window.addEventListener('mouseup', () => { dragging = false; viewport.classList.remove('grabbing'); });
+
+  viewport.addEventListener('touchstart', e => {
+    if(e.target.closest('.org-card')) return;
+    const t = e.touches[0]; dragging = true; startX = t.clientX - panX; startY = t.clientY - panY;
+  }, {passive:true});
+  viewport.addEventListener('touchmove', e => {
+    if(!dragging) return;
+    const t = e.touches[0]; panX = t.clientX - startX; panY = t.clientY - startY;
+    applyTransform(true);
+  }, {passive:true});
+  viewport.addEventListener('touchend', () => { dragging = false; });
+
+  window.addEventListener('resize', () => fitToScreen());
+}
+
+/* ================= TABS ================= */
+function switchTab(tab){
+  const viewTree = document.getElementById('viewTree');
+  const viewDashboard = document.getElementById('viewDashboard');
+  const btnTree = document.getElementById('tabBtnTree');
+  const btnDashboard = document.getElementById('tabBtnDashboard');
+
+  if(tab === 'tree'){
+    viewTree.classList.remove('hidden'); viewDashboard.classList.add('hidden');
+    btnTree.className = "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-600 text-white shadow";
+    btnDashboard.className = "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-400 hover:text-white";
+    setTimeout(fitToScreen, 60);
+  } else {
+    viewTree.classList.add('hidden'); viewDashboard.classList.remove('hidden');
+    btnDashboard.className = "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-emerald-600 text-white shadow";
+    btnTree.className = "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 text-slate-400 hover:text-white";
+    renderTable();
+    renderDashboardAnalytics();
+  }
+}
+
+/* ================= FLATTEN / TABLE / EXPORT ================= */
+function getFlattenedData(){
+  let list = [];
+  const getParentName = (type, parentId) => {
+    const map = { direktur:'direktur', manajer:'manajer', kabid:'kabid', ketuadivisi:'ketuadivisi', wakabid:'wakabid', koordinator:'koordinator' };
+    const arr = ORG_DATA[map[type]];
+    if(!arr) return '-';
+    const found = arr.find(x => x.id == parentId);
+    return found ? found.nama : '-';
+  };
+
+  ORG_DATA.direktur.forEach(d => list.push({ id:d.id, levelKey:'direktur', namaUnit:d.nama, level:'Direktorat', pejabat:d.pejabat, foto:d.foto, atasan:'-' }));
+  ORG_DATA.manajer.forEach(m => list.push({ id:m.id, levelKey:'manajer', namaUnit:m.nama, level:'Manajer Dept.', pejabat:m.pejabat, foto:m.foto, atasan:getParentName('direktur', m.direkturId) }));
+  ORG_DATA.kabid.forEach(kb => list.push({ id:kb.id, levelKey:'kabid', namaUnit:kb.nama, level:'Kepala Bidang', pejabat:kb.pejabat, foto:kb.foto, atasan:getParentName('manajer', kb.manajerId) }));
+  ORG_DATA.ketuadivisi.forEach(kd => list.push({ id:kd.id, levelKey:'ketuadivisi', namaUnit:kd.nama, level:'Ketua Divisi', pejabat:kd.pejabat, foto:kd.foto, atasan:getParentName('manajer', kd.manajerId) }));
+  ORG_DATA.wakabid.forEach(w => list.push({ id:w.id, levelKey:'wakabid', namaUnit:w.nama, level:'Wakil Kabid', pejabat:w.pejabat, foto:w.foto, atasan:getParentName('kabid', w.kabidId) }));
+  ORG_DATA.koordinator.forEach(k => list.push({ id:k.id, levelKey:'koordinator', namaUnit:k.nama, level:'Koordinator Unit', pejabat:k.pejabat, foto:k.foto, atasan:getParentName(k.parentType, k.parentId) }));
+  ORG_DATA.staf.forEach(s => list.push({ id:s.id, levelKey:'staf', namaUnit:s.nama, level:'Staf / Guru', pejabat:s.pejabat, foto:s.foto, atasan:getParentName(s.parentType, s.parentId) }));
+
+  return list;
+}
+
+function renderTable(){
+  const data = getFlattenedData();
+  const search = document.getElementById('tableSearch').value.toLowerCase();
+  const tbody = document.getElementById('tableBody');
+
+  const filtered = data.filter(item =>
+    item.namaUnit.toLowerCase().includes(search) ||
+    item.pejabat.toLowerCase().includes(search) ||
+    item.level.toLowerCase().includes(search)
+  );
+
+  tbody.innerHTML = filtered.map((item, idx) => `
+    <tr class="hover:bg-slate-900/50 transition">
+      <td class="px-5 py-3 font-semibold text-slate-500">${idx+1}</td>
+      <td class="px-5 py-3">
+        <div class="flex items-center gap-3">
+          ${renderAvatarHtml(item.foto, item.pejabat, "w-8 h-8 text-[10px]")}
+          <span class="text-emerald-400 font-semibold">${escapeHtml(item.pejabat)}</span>
+        </div>
+      </td>
+      <td class="px-5 py-3 font-bold text-white">${escapeHtml(item.namaUnit)}</td>
+      <td class="px-5 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">${item.level}</span></td>
+      <td class="px-5 py-3 text-slate-400">${escapeHtml(item.atasan)}</td>
+      <td class="px-5 py-3 text-center">
+        <button onclick="editNode('${item.levelKey}', '${item.id}')" class="text-amber-400 hover:text-amber-300 mr-2"><i class="fa-solid fa-pen"></i></button>
+        <button onclick="deleteNode('${item.levelKey}', '${item.id}')" class="text-rose-400 hover:text-rose-300"><i class="fa-solid fa-trash"></i></button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderDashboardAnalytics(){
+  const data = getFlattenedData();
+  const total = data.length || 1;
+
+  const countDir = ORG_DATA.direktur.length;
+  const countDept = ORG_DATA.manajer.length + ORG_DATA.kabid.length + ORG_DATA.ketuadivisi.length;
+  const countStaf = ORG_DATA.koordinator.length + ORG_DATA.staf.length;
+
+  document.getElementById('statTotalPersonel').innerText = data.length;
+  document.getElementById('statTotalDirektorat').innerText = countDir;
+  document.getElementById('statTotalDept').innerText = countDept;
+  document.getElementById('statTotalStaf').innerText = countStaf;
+  document.getElementById('pctDirektorat').innerText = Math.round(countDir/total*100) + '% dari total';
+  document.getElementById('pctDept').innerText = Math.round(countDept/total*100) + '% dari total';
+  document.getElementById('pctStaf').innerText = Math.round(countStaf/total*100) + '% dari total';
+
+  const levelCounts = {};
+  data.forEach(d => { levelCounts[d.level] = (levelCounts[d.level]||0)+1; });
+
+  const ctxLevel = document.getElementById('chartKomposisiLevel').getContext('2d');
+  if(chartLevelInstance) chartLevelInstance.destroy();
+  chartLevelInstance = new Chart(ctxLevel, {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(levelCounts),
+      datasets: [{
+        data: Object.values(levelCounts),
+        backgroundColor: ['#10B981','#3B82F6','#F59E0B','#14B8A6','#6366F1','#A855F7'],
+        borderColor: '#0D1420', borderWidth: 3
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: { legend: { position:'right', labels:{ color:'#94A3B8', boxWidth:10, font:{ size:10 } } } }
+    }
+  });
+
+  const countDescendants = (levelKey, id) => {
+    let count = 1;
+    getChildren(levelKey, id).forEach(c => { count += countDescendants(c.level, c.item.id); });
+    return count;
+  };
+  const dirLabels = ORG_DATA.direktur.map(d => d.nama);
+  const dirCounts = ORG_DATA.direktur.map(d => countDescendants('direktur', d.id));
+
+  const ctxDir = document.getElementById('chartDistribusiDirektorat').getContext('2d');
+  if(chartDirInstance) chartDirInstance.destroy();
+  chartDirInstance = new Chart(ctxDir, {
+    type: 'bar',
+    data: { labels: dirLabels, datasets: [{ label:'Jumlah Personel', data:dirCounts, backgroundColor:'rgba(16,185,129,.7)', borderColor:'#10B981', borderWidth:1.5, borderRadius:8 }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: { legend:{ display:false } },
+      scales: {
+        x: { ticks:{ color:'#94A3B8', font:{ size:9 } }, grid:{ display:false } },
+        y: { ticks:{ color:'#94A3B8', precision:0 }, grid:{ color:'#1E293B' } }
+      }
+    }
+  });
+}
+
+function exportToExcel(){
+  const data = getFlattenedData();
+  const rows = data.map((item, i) => ({
+    "No": i+1, "Nama Posisi / Unit": item.namaUnit, "Level Jabatan": item.level,
+    "Nama Pejabat": item.pejabat, "Induk Atasan Langsung": item.atasan
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Struktur Organisasi");
+  XLSX.writeFile(wb, "Struktur_Organisasi_NFBS_Lembang.xlsx");
+}
+
+function exportToPDF(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+  doc.setFontSize(16); doc.setTextColor(14,122,84);
+  doc.text("Laporan Struktur Organisasi - NFBS Lembang", 14, 15);
+  const data = getFlattenedData();
+  const body = data.map((item, i) => [i+1, item.namaUnit, item.level, item.pejabat, item.atasan]);
+  doc.autoTable({
+    startY: 22, head: [['No','Nama Posisi / Unit','Level Jabatan','Nama Pejabat','Atasan Langsung']],
+    body, theme:'grid', headStyles:{ fillColor:[14,122,84], textColor:[255,255,255] }, styles:{ fontSize:8, cellPadding:3 }
+  });
+  doc.save("Struktur_Organisasi_NFBS_Lembang.pdf");
+}
+
+/* ================= FOTO HANDLING (compressed & robust) ================= */
+const MAX_PHOTO_DIMENSION = 320;
+const PHOTO_QUALITY = 0.8;
+
+function previewSelectedFoto(){
+  const fileInput = document.getElementById('formFotoInput');
+  const status = document.getElementById('fotoStatus');
+  const file = fileInput.files && fileInput.files[0];
+  if(!file) return;
+
+  if(!file.type.startsWith('image/')){
+    status.innerText = 'File yang dipilih bukan gambar. Pilih file JPG/PNG.';
+    status.classList.add('text-rose-400');
+    fileInput.value = '';
+    return;
+  }
+
+  status.innerText = 'Memproses foto...';
+  status.classList.remove('text-rose-400');
+
+  const reader = new FileReader();
+  reader.onerror = () => {
+    status.innerText = 'Gagal membaca file foto. Coba file lain.';
+    status.classList.add('text-rose-400');
+  };
+  reader.onload = e => {
+    const img = new Image();
+    img.onerror = () => {
+      status.innerText = 'File rusak atau bukan gambar valid.';
+      status.classList.add('text-rose-400');
+    };
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if(w > h && w > MAX_PHOTO_DIMENSION){ h = Math.round(h * MAX_PHOTO_DIMENSION / w); w = MAX_PHOTO_DIMENSION; }
+      else if(h >= w && h > MAX_PHOTO_DIMENSION){ w = Math.round(w * MAX_PHOTO_DIMENSION / h); h = MAX_PHOTO_DIMENSION; }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+
+      try{
+        tempFotoBase64 = canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
+        document.getElementById('fotoPreviewContainer').innerHTML = `<img src="${tempFotoBase64}" class="w-full h-full object-cover">`;
+        document.getElementById('btnClearFoto').classList.remove('hidden');
+        const sizeKb = Math.round((tempFotoBase64.length * 0.75) / 1024);
+        status.innerText = `Foto siap digunakan (±${sizeKb}KB).`;
+      }catch(err){
+        status.innerText = 'Gagal memproses foto pada perangkat ini. Coba foto lain.';
+        status.classList.add('text-rose-400');
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearFotoPreview(){
+  tempFotoBase64 = '';
+  document.getElementById('formFotoInput').value = '';
+  document.getElementById('fotoPreviewContainer').innerHTML = '<i class="fa-solid fa-user"></i>';
+  document.getElementById('btnClearFoto').classList.add('hidden');
+  const status = document.getElementById('fotoStatus');
+  status.innerText = 'JPG/PNG, otomatis dikompres — maks. hasil ±150KB.';
+  status.classList.remove('text-rose-400');
+}
+
+/* ================= IMPORT DATA (Excel/CSV) ================= */
+const LEVEL_LABEL_TO_KEY = {
+  'direktorat':'direktur', 'direktur':'direktur',
+  'manajer':'manajer', 'departemen':'manajer', 'manajer / departemen':'manajer', 'manajer/departemen':'manajer',
+  'kabid':'kabid', 'kepala bidang':'kabid',
+  'ketua divisi':'ketuadivisi', 'ketuadivisi':'ketuadivisi', 'divisi':'ketuadivisi',
+  'wakabid':'wakabid', 'wakil kepala bidang':'wakabid', 'wakil kabid':'wakabid',
+  'koordinator':'koordinator', 'koordinator unit':'koordinator',
+  'staf':'staf', 'staff':'staf', 'guru':'staf', 'staf / guru':'staf', 'staf/guru':'staf'
+};
+
+let parsedImportRows = [];
+let importErrors = [];
+
+function openImportModal(){
+  document.getElementById('importFileInput').value = '';
+  document.getElementById('importPreviewBox').classList.add('hidden');
+  document.getElementById('btnProcessImport').disabled = true;
+  parsedImportRows = [];
+  importErrors = [];
+  document.getElementById('modalImport').classList.remove('hidden');
+}
+
+function closeImportModal(){
+  document.getElementById('modalImport').classList.add('hidden');
+}
+
+function downloadImportTemplate(){
+  const wsData = [
+    ['Level', 'Nama Unit / Posisi', 'Nama Pejabat', 'Atasan Langsung (Nama Unit)'],
+    ['Direktorat', 'Direktorat Pendidikan', 'KH. Contoh Nama, Lc.', ''],
+    ['Manajer', 'Dept. Kurikulum', 'Ustadz Contoh Satu, M.Pd.', 'Direktorat Pendidikan'],
+    ['Kabid', 'Bidang SMA Islam', 'Ustadz Contoh Dua, S.Pd.', 'Dept. Kurikulum'],
+    ['Ketua Divisi', 'Divisi Pengadaan', 'Ustadz Contoh Tiga, S.E.', 'Dept. Kurikulum'],
+    ['Wakabid', 'Wakabid Kurikulum SMA', 'Ustadz Contoh Empat, S.T.', 'Bidang SMA Islam'],
+    ['Koordinator', 'Koord. MIPA', 'Ustadz Contoh Lima, S.Si.', 'Wakabid Kurikulum SMA'],
+    ['Staf', 'Guru Fisika', 'Ustadz Contoh Enam', 'Koord. MIPA']
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [{ wch:14 }, { wch:28 }, { wch:28 }, { wch:32 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Template Import');
+
+  const wsInfo = XLSX.utils.aoa_to_sheet([
+    ['PETUNJUK PENGISIAN'],
+    ['1. Kolom Level diisi salah satu: Direktorat, Manajer, Kabid, Ketua Divisi, Wakabid, Koordinator, Staf'],
+    ['2. Kolom "Atasan Langsung" diisi PERSIS SAMA dengan Nama Unit/Posisi atasannya (kosongkan khusus untuk Direktorat)'],
+    ['3. Urutan baris bebas — sistem otomatis mengurutkan dari Direktorat ke bawah saat memproses'],
+    ['4. Foto tidak bisa diimpor lewat Excel — tambahkan foto belakangan lewat tombol Edit pada tiap data'],
+    ['5. Baris contoh boleh dihapus/diganti, tapi baris header (baris 1) jangan diubah']
+  ]);
+  wsInfo['!cols'] = [{ wch:95 }];
+  XLSX.utils.book_append_sheet(wb, wsInfo, 'Petunjuk');
+
+  XLSX.writeFile(wb, 'Template_Import_Struktur_Organisasi.xlsx');
+}
+
+function handleImportFileSelected(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onerror = () => alert('Gagal membaca file. Coba unggah ulang.');
+  reader.onload = ev => {
+    try{
+      const wb = XLSX.read(ev.target.result, { type:'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval:'' });
+      validateAndPreviewImport(rows);
+    }catch(err){
+      alert('Gagal membaca file. Pastikan formatnya .xlsx/.xls/.csv sesuai template.');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function validateAndPreviewImport(rawRows){
+  parsedImportRows = [];
+  importErrors = [];
+
+  rawRows.forEach((row, idx) => {
+    const rowNum = idx + 2; // +2 karena baris 1 adalah header
+    const levelRaw = String(row['Level'] ?? '').trim().toLowerCase();
+    const namaUnit = String(row['Nama Unit / Posisi'] ?? row['Nama Unit'] ?? '').trim();
+    const namaPejabat = String(row['Nama Pejabat'] ?? '').trim();
+    const atasan = String(row['Atasan Langsung (Nama Unit)'] ?? row['Atasan Langsung'] ?? row['Atasan'] ?? '').trim();
+
+    if(!levelRaw && !namaUnit && !namaPejabat) return; // baris kosong, lewati
+
+    const levelKey = LEVEL_LABEL_TO_KEY[levelRaw];
+    if(!levelKey){ importErrors.push(`Baris ${rowNum}: Level "${row['Level']}" tidak dikenali.`); return; }
+    if(!namaUnit){ importErrors.push(`Baris ${rowNum}: Nama Unit/Posisi wajib diisi.`); return; }
+    if(!namaPejabat){ importErrors.push(`Baris ${rowNum}: Nama Pejabat wajib diisi.`); return; }
+    if(levelKey !== 'direktur' && !atasan){ importErrors.push(`Baris ${rowNum}: Atasan Langsung wajib diisi untuk level "${row['Level']}".`); return; }
+
+    parsedImportRows.push({ rowNum, level:levelKey, namaUnit, namaPejabat, atasan });
+  });
+
+  // Urutkan berdasar jenjang supaya atasan yang baru diimpor sudah tersedia
+  // saat baris anaknya diproses, walau urutan di file aslinya acak.
+  parsedImportRows.sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level));
+
+  const box = document.getElementById('importPreviewBox');
+  box.classList.remove('hidden');
+  document.getElementById('importSummaryText').innerText =
+    `${parsedImportRows.length} baris siap diimpor` + (importErrors.length ? `, ${importErrors.length} baris bermasalah (akan dilewati).` : '.');
+  document.getElementById('importErrorList').innerHTML = importErrors.map(msg => `<div>• ${escapeHtml(msg)}</div>`).join('');
+
+  document.getElementById('btnProcessImport').disabled = parsedImportRows.length === 0;
+}
+
+async function processImport(){
+  if(parsedImportRows.length === 0) return;
+  const rowsToImport = parsedImportRows;
+  closeImportModal();
+  showProgressOverlay('Mengimpor data...');
+
+  // Peta nama_unit (huruf kecil) -> id, gabungan data yang sudah ada + yang baru diimpor
+  const nameToId = {};
+  LEVEL_ORDER.forEach(lvl => (ORG_DATA[lvl] || []).forEach(item => { nameToId[item.nama.trim().toLowerCase()] = item.id; }));
+
+  let success = 0;
+  const failedRows = [];
+
+  for(const row of rowsToImport){
+    let parentId = null;
+    if(row.level !== 'direktur'){
+      parentId = nameToId[row.atasan.trim().toLowerCase()];
+      if(!parentId){
+        failedRows.push(`Baris ${row.rowNum}: Atasan "${row.atasan}" tidak ditemukan.`);
+        continue;
+      }
+    }
+
+    updateProgressOverlay(`${success + failedRows.length + 1} / ${rowsToImport.length} — ${row.namaUnit}`);
+
+    const { data, error } = await supabaseClient.from(TABLE_NAME)
+      .insert({ level:row.level, parent_id:parentId, nama_unit:row.namaUnit, nama_pejabat:row.namaPejabat, foto_url:null })
+      .select().single();
+
+    if(error){
+      failedRows.push(`Baris ${row.rowNum} (${row.namaUnit}): ${error.message}`);
+      continue;
+    }
+
+    nameToId[row.namaUnit.trim().toLowerCase()] = data.id;
+    success++;
+  }
+
+  hideProgressOverlay();
+  await refreshFromSupabase();
+
+  let msg = `Import selesai. ${success} data berhasil ditambahkan.`;
+  if(failedRows.length){
+    msg += `\n\n${failedRows.length} baris gagal:\n` + failedRows.slice(0, 15).join('\n') + (failedRows.length > 15 ? `\n...dan ${failedRows.length - 15} lainnya.` : '');
+  }
+  alert(msg);
+}
+
+/* ================= CRUD / MODAL ================= */
+function editNode(level, id, e){
+  if(e) e.stopPropagation();
+  const item = ORG_DATA[level].find(x => x.id === id || x.id == id);
+  if(!item) return;
+
+  document.getElementById('editNodeId').value = id;
+  document.getElementById('formLevel').value = level;
+  document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-nfbs-gold"></i> Edit Data Anggota';
+
+  onFormLevelChange();
+
+  document.getElementById('formNamaUnit').value = item.nama;
+  document.getElementById('formNamaPejabat').value = item.pejabat;
+
+  tempFotoBase64 = item.foto || '';
+  if(tempFotoBase64){
+    document.getElementById('fotoPreviewContainer').innerHTML = `<img src="${tempFotoBase64}" class="w-full h-full object-cover">`;
+    document.getElementById('btnClearFoto').classList.remove('hidden');
+  } else {
+    clearFotoPreview();
+  }
+
+  const selectParent = document.getElementById('formParent');
+  if(level === 'manajer') selectParent.value = item.direkturId;
+  else if(level === 'kabid') selectParent.value = item.manajerId;
+  else if(level === 'ketuadivisi') selectParent.value = item.manajerId;
+  else if(level === 'wakabid') selectParent.value = item.kabidId;
+  else if(level === 'koordinator' || level === 'staf') selectParent.value = `${item.parentType}_${item.parentId}`;
+
+  document.getElementById('modalInput').classList.remove('hidden');
+}
+
+async function deleteNode(level, id, e){
+  if(e) e.stopPropagation();
+  if(!confirm('Apakah Anda yakin ingin menghapus data ini? Jika unit ini memiliki bawahan, seluruh bawahannya akan ikut terhapus.')) return;
+  try{
+    const { error } = await supabaseClient.from(TABLE_NAME).delete().eq('id', id);
+    if(error) throw error;
+    showSaveToast('Perubahan tersimpan otomatis');
+    await refreshFromSupabase();
+  }catch(err){
+    alert('Gagal menghapus data di Supabase: ' + (err.message || err));
+  }
+}
+
+function openInputModal(){
+  document.getElementById('editNodeId').value = '';
+  document.getElementById('modalTitle').innerHTML = '<i class="fa-solid fa-user-plus text-nfbs-gold"></i> Input Data Anggota';
+  document.getElementById('formNamaUnit').value = '';
+  document.getElementById('formNamaPejabat').value = '';
+  document.getElementById('formLevel').value = 'direktur';
+  clearFotoPreview();
+  onFormLevelChange();
+  document.getElementById('modalInput').classList.remove('hidden');
+}
+
+function closeInputModal(){
+  document.getElementById('modalInput').classList.add('hidden');
+}
+
+function onFormLevelChange(){
+  const level = document.getElementById('formLevel').value;
+  const containerParent = document.getElementById('containerParent');
+  const selectParent = document.getElementById('formParent');
+  const labelParent = document.getElementById('labelParent');
+
+  selectParent.innerHTML = '';
+
+  if(level === 'direktur'){
+    containerParent.classList.add('hidden');
+  } else {
+    containerParent.classList.remove('hidden');
+    if(level === 'manajer'){
+      labelParent.innerText = 'Pilih Direktorat';
+      ORG_DATA.direktur.forEach(d => selectParent.innerHTML += `<option value="${d.id}">${escapeHtml(d.nama)}</option>`);
+    } else if(level === 'kabid'){
+      labelParent.innerText = 'Pilih Manajer / Dept.';
+      ORG_DATA.manajer.forEach(m => selectParent.innerHTML += `<option value="${m.id}">${escapeHtml(m.nama)}</option>`);
+    } else if(level === 'ketuadivisi'){
+      labelParent.innerText = 'Pilih Manajer / Dept.';
+      ORG_DATA.manajer.forEach(m => selectParent.innerHTML += `<option value="${m.id}">${escapeHtml(m.nama)}</option>`);
+    } else if(level === 'wakabid'){
+      labelParent.innerText = 'Pilih Kepala Bidang';
+      ORG_DATA.kabid.forEach(k => selectParent.innerHTML += `<option value="${k.id}">${escapeHtml(k.nama)}</option>`);
+    } else if(level === 'koordinator' || level === 'staf'){
+      labelParent.innerText = 'Pilih Induk Atasan Langsung';
+      ORG_DATA.direktur.forEach(d => selectParent.innerHTML += `<option value="direktur_${d.id}">Direktorat: ${escapeHtml(d.nama)}</option>`);
+      ORG_DATA.manajer.forEach(m => selectParent.innerHTML += `<option value="manajer_${m.id}">Manajer: ${escapeHtml(m.nama)}</option>`);
+      ORG_DATA.kabid.forEach(k => selectParent.innerHTML += `<option value="kabid_${k.id}">Kabid: ${escapeHtml(k.nama)}</option>`);
+      ORG_DATA.ketuadivisi.forEach(kd => selectParent.innerHTML += `<option value="ketuadivisi_${kd.id}">Ketua Divisi: ${escapeHtml(kd.nama)}</option>`);
+      ORG_DATA.wakabid.forEach(w => selectParent.innerHTML += `<option value="wakabid_${w.id}">Wakabid: ${escapeHtml(w.nama)}</option>`);
+      if(level === 'staf'){
+        ORG_DATA.koordinator.forEach(kr => selectParent.innerHTML += `<option value="koordinator_${kr.id}">Koord: ${escapeHtml(kr.nama)}</option>`);
+      }
+    }
+  }
+}
+
+async function handleFormSubmit(e){
+  e.preventDefault();
+  const editId = document.getElementById('editNodeId').value;
+  const level = document.getElementById('formLevel').value;
+  const namaUnit = document.getElementById('formNamaUnit').value.trim();
+  const namaPejabat = document.getElementById('formNamaPejabat').value.trim();
+  const parentVal = document.getElementById('formParent').value;
+
+  // Tentukan parent_id (uuid) berdasarkan level yang dipilih
+  let parentId = null;
+  if(level !== 'direktur'){
+    if(level === 'koordinator' || level === 'staf'){
+      const [, pId] = parentVal.split('_');
+      parentId = pId;
+    } else {
+      parentId = parentVal;
+    }
+  }
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  if(submitBtn){ submitBtn.disabled = true; submitBtn.innerText = 'Menyimpan...'; }
+
+  try{
+    // tempFotoBase64: '' (dihapus), 'data:...' (foto baru, perlu diunggah), atau URL lama (tidak berubah)
+    let fotoUrl;
+    if(tempFotoBase64 === ''){
+      fotoUrl = null;
+    } else if(tempFotoBase64.startsWith('data:')){
+      fotoUrl = await uploadDataUrlToBucket(tempFotoBase64);
+    } else {
+      fotoUrl = tempFotoBase64;
+    }
+
+    const payload = { level, parent_id: parentId, nama_unit: namaUnit, nama_pejabat: namaPejabat, foto_url: fotoUrl };
+
+    let error;
+    if(editId){
+      ({ error } = await supabaseClient.from(TABLE_NAME).update(payload).eq('id', editId));
+    } else {
+      ({ error } = await supabaseClient.from(TABLE_NAME).insert(payload));
+    }
+    if(error) throw error;
+
+    showSaveToast('Perubahan tersimpan otomatis');
+    closeInputModal();
+    await refreshFromSupabase();
+  }catch(err){
+    alert('Gagal menyimpan ke Supabase: ' + (err.message || err));
+  }finally{
+    if(submitBtn){ submitBtn.disabled = false; submitBtn.innerText = 'Simpan Data'; }
+  }
+}
+
+/* ================= INIT ================= */
+async function initApp(){
+  await refreshFromSupabase();
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await initApp();
+  initPan();
+});
+</script>
+</body>
+</html>
